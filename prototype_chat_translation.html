@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>채팅 번역 기능 — 프로토타입 데모</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif;
+    background: #eef1f6; color: #222; line-height: 1.5;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 12px; gap: 16px;
+  }
+  h1 { font-size: 18px; }
+  .note {
+    max-width: 900px; font-size: 12px; color: #666; background: #fff7e6;
+    border: 1px solid #ffe0a3; border-radius: 8px; padding: 10px 12px;
+  }
+  .wrap { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+
+  /* phone */
+  .phone {
+    width: 360px; background: #fff; border-radius: 20px; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,.15); display: flex; flex-direction: column;
+    height: 640px;
+  }
+  .phone-head {
+    background: #3d5afe; color: #fff; padding: 14px 16px; font-weight: 600; font-size: 15px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .phone-head small { font-weight: 400; opacity: .85; font-size: 11px; }
+  .perspective { display: flex; gap: 6px; padding: 10px 12px; background: #f4f6fb; border-bottom: 1px solid #e6e9f0; }
+  .perspective button {
+    flex: 1; font-size: 12px; padding: 7px 4px; border: 1px solid #cfd6e6; background: #fff;
+    border-radius: 8px; cursor: pointer; color: #444;
+  }
+  .perspective button.active { background: #3d5afe; color: #fff; border-color: #3d5afe; }
+  .status {
+    padding: 8px 12px; font-size: 11px; color: #555; background: #fafbfe;
+    border-bottom: 1px solid #eef0f6; display: flex; align-items: center; gap: 8px;
+  }
+  .chip { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .chip.on { background: #e6f7ee; color: #1a9d54; }
+  .chip.off { background: #f0f0f0; color: #888; }
+
+  .chat { flex: 1; overflow-y: auto; padding: 14px; background: #f7f8fc; }
+  .row { display: flex; margin-bottom: 14px; }
+  .row.me { justify-content: flex-end; }
+  .row.other { justify-content: flex-start; }
+  .bubble { max-width: 76%; }
+  .who { font-size: 10px; color: #999; margin-bottom: 3px; }
+  .row.me .who { text-align: right; }
+  .msg {
+    padding: 9px 12px; border-radius: 14px; font-size: 14px; position: relative; word-break: break-word;
+  }
+  .row.other .msg { background: #fff; border: 1px solid #ececf3; border-top-left-radius: 4px; }
+  .row.me .msg { background: #3d5afe; color: #fff; border-top-right-radius: 4px; }
+  .translatable { cursor: pointer; }
+  .translatable:hover { outline: 2px solid #b9c4ff; }
+  .orig-faded { opacity: .5; font-size: 12px; }
+  .tr-block {
+    margin-top: 6px; padding: 8px 10px; background: #f0f4ff; border-left: 3px solid #3d5afe;
+    border-radius: 6px; font-size: 14px; color: #1a2a6b;
+  }
+  .badge {
+    display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+    margin-top: 5px;
+  }
+  .badge.papago { background: #e3f6e9; color: #159a4d; }
+  .badge.gemini { background: #efe6ff; color: #7c3aed; }
+  .slang-hl { background: #fff2b8; border-radius: 3px; padding: 0 2px; font-weight: 600; }
+  .act {
+    display: inline-block; margin-top: 6px; font-size: 11px; color: #3d5afe; cursor: pointer;
+    border: 1px solid #cdd6ff; border-radius: 999px; padding: 3px 10px; background: #fff;
+  }
+  .row.other .act:hover { background: #eef1ff; }
+
+  /* toast */
+  .toast-area { position: relative; }
+  .toast {
+    position: absolute; left: 12px; right: 12px; bottom: 12px; background: #222; color: #fff;
+    border-radius: 12px; padding: 12px 14px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.3);
+    display: none;
+  }
+  .toast.show { display: block; }
+  .toast .t-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .toast button {
+    flex: 1; padding: 7px; border-radius: 8px; border: none; cursor: pointer; font-size: 12px; font-weight: 600;
+  }
+  .toast .primary { background: #3d5afe; color: #fff; }
+  .toast .ghost { background: #444; color: #ddd; }
+
+  /* log panel */
+  .log {
+    width: 360px; background: #0f1424; color: #cdd6ee; border-radius: 14px; padding: 14px;
+    font-family: "Consolas", monospace; font-size: 11.5px; height: 640px; overflow-y: auto;
+  }
+  .log h3 { color: #fff; font-size: 13px; margin-bottom: 8px; font-family: inherit; }
+  .log .line { margin-bottom: 8px; border-bottom: 1px dashed #2a3350; padding-bottom: 8px; }
+  .log .k { color: #7fb3ff; }
+  .log .g { color: #c4a7ff; }
+  .log .p { color: #7fe0a0; }
+  .log .muted { color: #6b7594; }
+</style>
+</head>
+<body>
+  <h1>아이템매니아 채팅 번역 — 프로토타입 데모</h1>
+  <div class="note">
+    ※ 시연용 목업입니다. <b>언어 감지·게임 은어 라우팅 로직은 실제로 동작</b>하며, 번역 결과 텍스트만 미리 준비된 예시입니다
+    (실서비스에서는 파파고 / Gemini 3.5 Flash API를 호출). 메시지를 <b>클릭</b>하면 "꾹 눌러 번역"을 시뮬레이션합니다.
+  </div>
+
+  <div class="wrap">
+    <!-- PHONE -->
+    <div class="phone">
+      <div class="phone-head">
+        <span>1:1 채팅 <small id="head-sub"></small></span>
+        <span style="font-size:11px">거래 #2026070106</span>
+      </div>
+      <div class="perspective">
+        <button id="p-seller" class="active" onclick="setPerspective('seller')">👤 중국인 판매자 시점 (→중국어)</button>
+        <button id="p-buyer" onclick="setPerspective('buyer')">👤 한국인 구매자 시점 (→한국어)</button>
+      </div>
+      <div class="status">
+        자동번역 <span id="auto-chip" class="chip off">OFF</span>
+        <button id="auto-toggle" onclick="toggleAuto()"
+          style="font-size:11px;padding:3px 10px;border:1px solid #3d5afe;background:#fff;color:#3d5afe;border-radius:999px;cursor:pointer;">
+          전체 자동번역</button>
+        <span class="muted" id="reader-lang" style="margin-left:auto;color:#999"></span>
+      </div>
+      <div class="toast-area" style="flex:1; display:flex; flex-direction:column;">
+        <div class="chat" id="chat"></div>
+        <div class="toast" id="toast">
+          <div id="toast-msg"></div>
+          <div class="t-actions" id="toast-actions"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="log">
+      <h3>🔎 번역 라우팅 로그</h3>
+      <div id="log"></div>
+    </div>
+  </div>
+
+<script>
+/* ---------- 데이터 ---------- */
+// sender: buyer(한국인 구매자) / seller(중국인 판매자)
+// tr: 목표 언어별 준비된 번역 (실서비스에서는 API 응답)
+const MESSAGES = [
+  { id:1, sender:'buyer',  text:'안녕하세요, 게임머니 얼마에 파세요?',   tr:{ zh:'你好，游戏币多少钱卖？' } },
+  { id:2, sender:'seller', text:'你好，1万韩元一组',                    tr:{ ko:'안녕하세요, 한 세트에 1만원이요' } },
+  { id:3, sender:'buyer',  text:'제시요 선제 주시면 바로 거래함',       tr:{ zh:'请先出价。如果您先付款，就可以马上交易。' } },
+  { id:4, sender:'seller', text:'可以，我先给',                        tr:{ ko:'네, 제가 먼저 드릴게요' } },
+  { id:5, sender:'buyer',  text:'이거 거불템 아니죠?',                 tr:{ zh:'这个不是不可交易物品吧？' } },
+  { id:6, sender:'seller', text:'不是，是正常可交易的物品',            tr:{ ko:'아니요, 정상적으로 거래 가능한 물품이에요' } },
+];
+
+// 게임 은어 사전 (실서비스에서는 DB로 관리·주기적 업데이트)
+const SLANG = ['제시','선제','거불','거불템','1대주','구깡계','넥깡계','파티','분수대','쌀먹','칼답','템값'];
+
+/* ---------- 언어 감지 (실제 로직) ---------- */
+function detectLang(t){
+  if (/[가-힣]/.test(t)) return 'ko';        // 한글 → 한국어
+  if (/[぀-ヿ]/.test(t)) return 'ja';        // 가나 → 일본어
+  if (/[一-鿿]/.test(t)) return 'zh';        // 한자만 → 중국어
+  if (/[A-Za-z]/.test(t)) return 'en';               // 라틴 → 영어
+  return 'unknown';
+}
+function matchedSlang(t){ return SLANG.filter(w => t.includes(w)); }
+const LANGNAME = { ko:'한국어', zh:'중국어', ja:'일본어', en:'영어', unknown:'미상' };
+
+/* ---------- 상태 ---------- */
+let perspective = 'seller';                 // seller: 중국인(→중국어) / buyer: 한국인(→한국어)
+let targetLang = 'zh';
+let autoTranslate = false;
+let translated = new Set();                 // 현재 번역 표시 중인 메시지 id
+let optInAsked = false;
+
+function readerInfo(){
+  return perspective === 'seller'
+    ? { target:'zh', me:'seller' }
+    : { target:'ko', me:'buyer' };
+}
+
+function setPerspective(p){
+  perspective = p;
+  targetLang = readerInfo().target;
+  autoTranslate = false; translated = new Set(); optInAsked = false;
+  hideToast();
+  document.getElementById('p-seller').classList.toggle('active', p==='seller');
+  document.getElementById('p-buyer').classList.toggle('active', p==='buyer');
+  document.getElementById('head-sub').textContent = p==='seller' ? '· 내가 중국인 판매자' : '· 내가 한국인 구매자';
+  document.getElementById('reader-lang').textContent = '읽는 사람 언어: ' + LANGNAME[targetLang];
+  clearLog();
+  log(`<span class="muted">시점 전환 → ${p==='seller'?'중국인 판매자(목표: 중국어)':'한국인 구매자(목표: 한국어)'}</span>`);
+  render();
+  updateAutoChip();
+}
+
+function updateAutoChip(){
+  const c = document.getElementById('auto-chip');
+  c.textContent = autoTranslate ? 'ON' : 'OFF';
+  c.className = 'chip ' + (autoTranslate ? 'on' : 'off');
+  const t = document.getElementById('auto-toggle');
+  if (t) t.textContent = autoTranslate ? '자동번역 끄기' : '전체 자동번역';
+}
+
+/* 상단 토글: 토스트 없이 즉시 자동번역 ON/OFF (데모 편의) */
+function toggleAuto(){
+  if (autoTranslate) disableAuto();
+  else enableAuto();
+}
+
+/* 한 메시지가 '내가 읽어야 할 외국어'인지 */
+function isForeign(m){
+  const info = readerInfo();
+  if (m.sender === info.me) return false;          // 내 메시지
+  return detectLang(m.text) !== info.target;       // 상대 언어가 내 언어와 다르면 번역 대상
+}
+/* 이 메시지 번역 시 사용할 엔진 */
+function engineFor(m){
+  const src = detectLang(m.text);
+  return (src === 'ko' && matchedSlang(m.text).length > 0) ? 'gemini' : 'papago';
+}
+
+/* ---------- 렌더 ---------- */
+function highlightSlang(text){
+  let out = text;
+  matchedSlang(text).forEach(w => {
+    out = out.replaceAll(w, `<span class="slang-hl">${w}</span>`);
+  });
+  return out;
+}
+
+function render(){
+  const info = readerInfo();
+  const chat = document.getElementById('chat');
+  chat.innerHTML = '';
+  MESSAGES.forEach(m => {
+    const mine = m.sender === info.me;
+    const foreign = isForeign(m);
+    const isTr = translated.has(m.id);
+    const src = detectLang(m.text);
+
+    const row = document.createElement('div');
+    row.className = 'row ' + (mine ? 'me' : 'other');
+
+    const who = mine ? '나' : (m.sender === 'buyer' ? '구매자(한국인)' : '판매자(중국인)');
+    let inner = `<div class="who">${who}</div>`;
+
+    if (foreign && isTr) {
+      const eng = engineFor(m);
+      inner += `<div class="msg translatable" onclick="activate(${m.id})">
+                  <div class="orig-faded">${highlightSlang(m.text)}</div>
+                  <div class="tr-block">${m.tr[info.target]}</div>
+                  <span class="badge ${eng}">${eng==='gemini'?'Gemini · 은어':'파파고'}</span>
+                </div>
+                <span class="act" onclick="revert(${m.id})">✕ 번역 취소</span>`;
+    } else if (foreign) {
+      inner += `<div class="msg translatable" onclick="activate(${m.id})">
+                  ${highlightSlang(m.text)}
+                </div>
+                <span class="act" onclick="activate(${m.id})">🌐 번역</span>`;
+    } else {
+      inner += `<div class="msg">${m.text}</div>`;
+    }
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = inner;
+    row.appendChild(bubble);
+    chat.appendChild(row);
+  });
+  chat.scrollTop = chat.scrollHeight;
+}
+
+/* ---------- 인터랙션 ---------- */
+function activate(id){
+  const m = MESSAGES.find(x => x.id === id);
+  if (!isForeign(m)) return;
+  if (translated.has(id)) { revert(id); return; }
+
+  doTranslate(m);
+  render();
+
+  if (!autoTranslate && !optInAsked) {
+    optInAsked = true;
+    showToast('이후 채팅 메시지도 <b>자동으로 번역</b>할까요?', [
+      { label:'자동번역 켜기', cls:'primary', fn: enableAuto },
+      { label:'닫기', cls:'ghost', fn: hideToast },
+    ]);
+  }
+}
+
+function doTranslate(m){
+  translated.add(m.id);
+  const src = detectLang(m.text);
+  const slang = matchedSlang(m.text);
+  const eng = engineFor(m);
+  if (eng === 'gemini') {
+    log(`<span class="k">감지</span>: ${LANGNAME[src]} · <span class="g">은어 [${slang.join(', ')}] 감지 → Gemini 3.5 Flash</span><br>
+         <span class="muted">"${m.text}"</span> → ${m.tr[targetLang]}`);
+  } else {
+    log(`<span class="k">감지</span>: ${LANGNAME[src]} · <span class="p">일반 문장 → 파파고</span><br>
+         <span class="muted">"${m.text}"</span> → ${m.tr[targetLang]}`);
+  }
+}
+
+function enableAuto(){
+  autoTranslate = true;
+  MESSAGES.filter(isForeign).forEach(m => { if(!translated.has(m.id)) doTranslate(m); });
+  hideToast(); updateAutoChip(); render();
+  log(`<span class="g">● 자동번역 ON — 모든 외국어 메시지 자동 번역</span>`);
+}
+
+function revert(id){
+  translated.delete(id);
+  render();
+  log(`<span class="muted">↩ 번역 취소 (메시지 #${id})</span>`);
+  if (autoTranslate) {
+    showToast('<b>자동번역을 해제</b>할까요?', [
+      { label:'해제', cls:'primary', fn: disableAuto },
+      { label:'닫기', cls:'ghost', fn: hideToast },
+    ]);
+  }
+}
+
+function disableAuto(){
+  autoTranslate = false;
+  translated = new Set();
+  hideToast(); updateAutoChip(); render();
+  log(`<span class="muted">○ 자동번역 OFF — 모두 원문 표시</span>`);
+}
+
+/* ---------- 토스트 ---------- */
+function showToast(msg, actions){
+  document.getElementById('toast-msg').innerHTML = msg;
+  const box = document.getElementById('toast-actions');
+  box.innerHTML = '';
+  actions.forEach(a => {
+    const b = document.createElement('button');
+    b.className = a.cls; b.textContent = a.label; b.onclick = a.fn;
+    box.appendChild(b);
+  });
+  document.getElementById('toast').classList.add('show');
+}
+function hideToast(){ document.getElementById('toast').classList.remove('show'); }
+
+/* ---------- 로그 ---------- */
+function log(html){
+  const el = document.getElementById('log');
+  const d = document.createElement('div');
+  d.className = 'line'; d.innerHTML = html;
+  el.prepend(d);
+}
+function clearLog(){ document.getElementById('log').innerHTML = ''; }
+
+/* ---------- init ---------- */
+setPerspective('seller');
+</script>
+</body>
+</html>
